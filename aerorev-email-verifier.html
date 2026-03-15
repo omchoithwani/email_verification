@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AeroRev — Email Verifier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #080E1A;
+      --accent:  #C8F04A;
+      --text:    #FFFFFF;
+      --text-2:  #8892A4;
+      --surface: #111827;
+      --border:  #1E2A3A;
+      --r-card:  12px;
+      --r-ui:    8px;
+      --head:    'Syne', sans-serif;
+      --body:    'DM Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Screens ── */
+    .screen { display: none; min-height: 100vh; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── Logo ── */
+    .logo { display: flex; align-items: center; gap: 6px; cursor: default; user-select: none; }
+    .logo-chev { color: var(--accent); font-family: var(--head); font-size: 22px; font-weight: 700; line-height: 1; }
+    .logo-name { color: var(--text); font-family: var(--head); font-size: 18px; font-weight: 700; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 20px; border-radius: var(--r-ui); border: none; cursor: pointer;
+      font-family: var(--body); font-size: 14px; font-weight: 500;
+      transition: opacity .15s, border-color .15s, color .15s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .38; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #080E1A; font-weight: 700; }
+    .btn-primary:hover { opacity: .9; }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .btn-ghost { background: transparent; color: var(--text-2); padding: 8px 14px; }
+    .btn-ghost:hover { color: var(--text); opacity: 1; }
+    .btn-lg { padding: 14px 28px; font-size: 15px; }
+    .btn-sm { padding: 7px 14px; font-size: 13px; }
+
+    /* ── Inputs ── */
+    .input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-ui); color: var(--text); font-family: var(--body);
+      font-size: 14px; padding: 11px 14px; outline: none; transition: border-color .15s;
+    }
+    .input:focus { border-color: var(--accent); }
+    .input::placeholder { color: var(--text-2); }
+    select.input {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238892A4' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
+      cursor: pointer;
+    }
+    .label { display: block; font-size: 12px; font-weight: 500; color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .err { color: #EF4444; font-size: 13px; margin-top: 8px; }
+
+    /* ── Cards ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 24px; }
+
+    /* ── Progress ── */
+    .prog-wrap { background: var(--border); border-radius: 100px; height: 6px; overflow: hidden; }
+    .prog-bar { height: 100%; background: var(--accent); border-radius: 100px; transition: width .25s ease; }
+    @keyframes prog-pulse {
+      0%   { margin-left: -40%; width: 40%; }
+      100% { margin-left: 100%; width: 40%; }
+    }
+    .prog-bar.indeterminate { animation: prog-pulse 1.3s linear infinite; width: 40% !important; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 500; white-space: nowrap;
+    }
+    .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .b-valid               { background: #C8F04A22; color: #C8F04A; }
+    .b-valid::before       { background: #C8F04A; }
+    .b-likely_valid        { background: #86EFAC22; color: #86EFAC; }
+    .b-likely_valid::before{ background: #86EFAC; }
+    .b-likely_valid_business        { background: #93C5FD22; color: #93C5FD; }
+    .b-likely_valid_business::before{ background: #93C5FD; }
+    .b-invalid_format,   .b-invalid_disposable,   .b-invalid_no_mx        { background: #EF444422; color: #EF4444; }
+    .b-invalid_format::before, .b-invalid_disposable::before, .b-invalid_no_mx::before { background: #EF4444; }
+    .b-unknown        { background: #F59E0B22; color: #F59E0B; }
+    .b-unknown::before{ background: #F59E0B; }
+
+    /* ── Toasts ── */
+    #toasts {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+    }
+    .toast {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ui);
+      padding: 12px 18px; font-size: 14px; max-width: 380px; pointer-events: auto;
+      animation: toast-in .2s ease; transition: opacity .3s;
+    }
+    @keyframes toast-in { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .toast.success { border-left: 3px solid var(--accent); }
+    .toast.error   { border-left: 3px solid #EF4444; }
+    .toast.info    { border-left: 3px solid #93C5FD; }
+
+    /* ── Modal ── */
+    #modal-bg {
+      display: none; position: fixed; inset: 0; background: #000000BB;
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    #modal-bg.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+      padding: 36px; width: 100%; max-width: 400px; text-align: center;
+    }
+    .modal-title { font-family: var(--head); font-size: 20px; margin-bottom: 8px; }
+    .modal-body  { color: var(--text-2); font-size: 14px; margin-bottom: 24px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+    /* ── App Header ── */
+    .app-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .app-header-right { display: flex; align-items: center; gap: 10px; }
+
+    /* ── Divider ── */
+    hr.div { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── Info icon / tooltip ── */
+    .tip {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--text-2);
+      color: var(--text-2); font-size: 9px; cursor: help; margin-left: 4px;
+      vertical-align: middle; position: relative;
+    }
+    .tip::after {
+      content: attr(data-t);
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+      transform: translateX(-50%); background: #1E2A3A; border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 12px; font-size: 11px; color: var(--text-2);
+      width: 240px; text-align: center; white-space: normal; z-index: 50; pointer-events: none;
+    }
+    .tip:hover::after { display: block; }
+
+    /* ═══════════════════════════════════════════
+       SCREEN: LANDING
+    ═══════════════════════════════════════════ */
+    #s-landing { align-items: center; justify-content: center; padding: 40px 20px; }
+    .landing-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+      padding: 48px; width: 100%; max-width: 500px;
+    }
+    .landing-card .logo { margin-bottom: 36px; }
+    .landing-h { font-family: var(--head); font-size: 30px; margin-bottom: 10px; }
+    .landing-sub { color: var(--text-2); font-size: 15px; margin-bottom: 36px; }
+    .landing-btns { display: flex; gap: 12px; }
+    .landing-btns .btn { flex: 1; }
+
+    /* ═══════════════════════════════════════════
+       SCREEN: TOKEN
+    ═══════════════════════════════════════════ */
+    #s-token { align-items: center; justify-content: center; padding: 40px 20px; }
+    .token-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+      padding: 40px; width: 100%; max-width: 480px;
+    }
+    .token-card .logo { margin-bottom: 32px; }
+    .token-h   { font-family: var(--head); font-size: 22px; margin-bottom: 6px; }
+    .token-sub { color: var(--text-2); font-size: 14px; margin-bottom: 24px; }
+    .back-link { color: var(--text-2); font-size: 13px; cursor: pointer; margin-top: 16px; display: inline-block; }
+    .back-link:hover { color: var(--accent); }
+
+    /* ═══════════════════════════════════════════
+       SCREEN: HUBSPOT DASHBOARD
+    ═══════════════════════════════════════════ */
+    #s-hubspot { flex-direction: column; }
+    .hs-body { flex: 1; padding: 32px; max-width: 900px; width: 100%; margin: 0 auto; }
+    .hs-body-head-h   { font-family: var(--head); font-size: 22px; margin-bottom: 4px; }
+    .hs-body-head-sub { color: var(--text-2); font-size: 14px; margin-bottom: 24px; }
+
+    .step-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 24px; margin-bottom: 20px; }
+    .step-hdr  { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .step-num  { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #080E1A; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .step-title{ font-family: var(--head); font-size: 16px; }
+
+    .src-toggle { display: flex; gap: 12px; margin-bottom: 18px; }
+    .src-opt {
+      flex: 1; border: 1px solid var(--border); border-radius: var(--r-ui);
+      padding: 14px; cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .src-opt.on { border-color: var(--accent); background: #C8F04A0D; }
+    .src-opt input[type=radio] { display: none; }
+    .src-opt-lbl { font-weight: 500; margin-bottom: 2px; }
+    .src-opt-desc{ font-size: 12px; color: var(--text-2); }
+
+    .prog-row { margin-bottom: 16px; }
+    .prog-lbl { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
+    .prog-lbl strong { color: var(--text); }
+
+    /* ═══════════════════════════════════════════
+       SCREEN: CSV UPLOAD
+    ═══════════════════════════════════════════ */
+    #s-csv { flex-direction: column; }
+    .csv-body { flex: 1; padding: 48px 32px; max-width: 700px; width: 100%; margin: 0 auto; }
+    .csv-h   { font-family: var(--head); font-size: 24px; margin-bottom: 6px; }
+    .csv-sub { color: var(--text-2); font-size: 14px; margin-bottom: 28px; }
+
+    .dropzone {
+      border: 2px dashed var(--border); border-radius: var(--r-card);
+      padding: 52px 32px; text-align: center; cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: #C8F04A08; }
+    .drop-icon { font-size: 40px; margin-bottom: 14px; }
+    .drop-text { color: var(--text-2); font-size: 14px; }
+    .drop-text span { color: var(--accent); }
+    .drop-hint { font-size: 12px; color: var(--text-2); margin-top: 8px; }
+
+    .csv-preview-box {
+      margin-top: 20px; padding: 16px;
+      background: #C8F04A0D; border: 1px solid #C8F04A33;
+      border-radius: var(--r-ui); font-size: 13px;
+    }
+    .csv-preview-box strong { color: var(--accent); }
+
+    /* ═══════════════════════════════════════════
+       SCREEN: RESULTS
+    ═══════════════════════════════════════════ */
+    #s-results { flex-direction: column; }
+    .res-body { flex: 1; padding: 24px 32px; overflow-x: hidden; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px; }
+    .stat-lbl { font-size: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .stat-val { font-family: var(--head); font-size: 32px; }
+    .stat-val.green { color: var(--accent); }
+    .stat-val.red   { color: #EF4444; }
+    .stat-val.amber { color: #F59E0B; }
+
+    .push-prog-wrap { margin-bottom: 16px; }
+    .push-prog-lbl  { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
+
+    .filter-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .filter-tabs { display: flex; gap: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ui); padding: 4px; }
+    .ftab {
+      padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none; background: transparent; color: var(--text-2); transition: all .15s;
+    }
+    .ftab.on { background: var(--accent); color: #080E1A; }
+    .ftab:hover:not(.on) { color: var(--text); }
+
+    .search-box {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-ui);
+      color: var(--text); font-family: var(--body); font-size: 13px;
+      padding: 8px 12px; outline: none; width: 240px;
+    }
+    .search-box:focus { border-color: var(--accent); }
+    .search-box::placeholder { color: var(--text-2); }
+
+    .tbl-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+    .tbl-wrap table { width: 100%; border-collapse: collapse; }
+    .tbl-wrap thead th {
+      background: var(--bg); padding: 12px 20px; text-align: left;
+      font-size: 11px; font-weight: 500; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .tbl-wrap tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    .tbl-wrap tbody tr:last-child { border-bottom: none; }
+    .tbl-wrap tbody tr:hover { background: #FFFFFF05; }
+    .tbl-wrap tbody td { padding: 11px 20px; font-size: 13px; color: var(--text); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tbl-wrap tbody td.dim { color: var(--text-2); }
+    .empty-state { text-align: center; padding: 52px; color: var(--text-2); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .landing-card { padding: 32px 20px; }
+      .landing-btns { flex-direction: column; }
+      .hs-body, .csv-body, .res-body { padding: 16px; }
+      .app-header { padding: 14px 16px; }
+      .search-box { width: 160px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toasts"></div>
+
+<!-- Reconnect modal -->
+<div id="modal-bg">
+  <div class="modal">
+    <div class="modal-title">Session Expired</div>
+    <div class="modal-body">Your HubSpot token is no longer valid. Reconnect to continue.</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="goTo('landing');closeModal()">Go Home</button>
+      <button class="btn btn-primary" onclick="goTo('token');closeModal()">Reconnect</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREEN: LANDING
+════════════════════════════════════════════════════ -->
+<div id="s-landing" class="screen">
+  <div class="landing-card">
+    <div class="logo">
+      <span class="logo-chev">»</span>
+      <span class="logo-name">AeroRev</span>
+    </div>
+    <h1 class="landing-h">Email Verifier</h1>
+    <p class="landing-sub">Verify emails from HubSpot or upload a CSV list</p>
+    <div class="landing-btns">
+      <button class="btn btn-outline btn-lg" onclick="goTo('token')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        Connect HubSpot
+      </button>
+      <button class="btn btn-primary btn-lg" onclick="startCSV()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload a CSV
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREEN: TOKEN INPUT
+════════════════════════════════════════════════════ -->
+<div id="s-token" class="screen">
+  <div class="token-card">
+    <div class="logo">
+      <span class="logo-chev">»</span>
+      <span class="logo-name">AeroRev</span>
+    </div>
+    <h2 class="token-h">Connect to HubSpot</h2>
+    <p class="token-sub">Enter your Private App token to pull contacts for verification.</p>
+    <div style="margin-bottom:16px;">
+      <label class="label" for="tok-in">Private App Token</label>
+      <input id="tok-in" class="input" type="password" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
+      <div id="tok-err" class="err" style="display:none;"></div>
+    </div>
+    <button class="btn btn-primary" id="tok-btn" style="width:100%;" onclick="connectHubSpot()">Connect to HubSpot</button>
+    <br />
+    <span class="back-link" onclick="goTo('landing')">← Back to home</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREEN: HUBSPOT DASHBOARD
+════════════════════════════════════════════════════ -->
+<div id="s-hubspot" class="screen">
+  <div class="app-header">
+    <div class="logo">
+      <span class="logo-chev">»</span>
+      <span class="logo-name">AeroRev</span>
+    </div>
+    <div class="app-header-right">
+      <span id="hs-acct" style="color:var(--text-2);font-size:13px;"></span>
+      <button class="btn btn-outline btn-sm" onclick="disconnect()">Disconnect</button>
+    </div>
+  </div>
+
+  <div class="hs-body">
+    <p class="hs-body-head-h">Pull &amp; Verify Contacts</p>
+    <p class="hs-body-head-sub">Select your contact source, then run verification.</p>
+
+    <!-- Step 1 -->
+    <div class="step-card">
+      <div class="step-hdr">
+        <div class="step-num">1</div>
+        <div class="step-title">Select Contact Source</div>
+      </div>
+
+      <div class="src-toggle">
+        <label class="src-opt on" id="opt-list">
+          <input type="radio" name="src" value="list" checked onchange="toggleSrc('list')" />
+          <div class="src-opt-lbl">Specific List</div>
+          <div class="src-opt-desc">Choose a HubSpot contact list</div>
+        </label>
+        <label class="src-opt" id="opt-filter">
+          <input type="radio" name="src" value="filter" onchange="toggleSrc('filter')" />
+          <div class="src-opt-lbl">Filter Contacts</div>
+          <div class="src-opt-desc">All contacts or a smart segment</div>
+        </label>
+      </div>
+
+      <div id="src-list-wrap">
+        <label class="label" for="list-sel">Choose a List</label>
+        <select id="list-sel" class="input">
+          <option value="">Loading lists…</option>
+        </select>
+      </div>
+
+      <div id="src-filter-wrap" style="display:none;">
+        <label class="label" for="filter-sel">Choose a Filter</label>
+        <select id="filter-sel" class="input">
+          <option value="all">All Contacts</option>
+          <option value="inactive_90">Contacts with no email activity in 90 days</option>
+          <option value="recent_30">Contacts added in last 30 days</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step-card">
+      <div class="step-hdr">
+        <div class="step-num">2</div>
+        <div class="step-title">Run Verification</div>
+      </div>
+
+      <div id="hs-pull-prog" style="display:none;" class="prog-row">
+        <div class="prog-lbl" id="hs-pull-lbl">Pulling contacts…</div>
+        <div class="prog-wrap"><div class="prog-bar indeterminate" id="hs-pull-bar"></div></div>
+      </div>
+
+      <div id="hs-ver-prog" style="display:none;" class="prog-row">
+        <div class="prog-lbl">Verifying <strong id="hs-ver-cur">0</strong> of <strong id="hs-ver-tot">0</strong>…</div>
+        <div class="prog-wrap"><div class="prog-bar" id="hs-ver-bar" style="width:0%"></div></div>
+      </div>
+
+      <button class="btn btn-primary" id="hs-run-btn" onclick="runHubSpot()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Pull Contacts &amp; Verify
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREEN: CSV UPLOAD
+════════════════════════════════════════════════════ -->
+<div id="s-csv" class="screen">
+  <div class="app-header">
+    <div class="logo">
+      <span class="logo-chev">»</span>
+      <span class="logo-name">AeroRev</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="goTo('landing')">← Back</button>
+  </div>
+
+  <div class="csv-body">
+    <h2 class="csv-h">Upload CSV</h2>
+    <p class="csv-sub">Drop a CSV file containing email addresses. We'll auto-detect the email column.</p>
+
+    <div id="dropzone" class="dropzone"
+         onclick="document.getElementById('csv-file').click()"
+         ondragover="doDragOver(event)" ondragleave="doDragLeave(event)" ondrop="doDrop(event)">
+      <div class="drop-icon">📂</div>
+      <div class="drop-text">Drag &amp; drop your CSV here or <span>browse files</span></div>
+      <div class="drop-hint">.csv files only</div>
+    </div>
+    <input id="csv-file" type="file" accept=".csv" style="display:none;" onchange="onFileSelect(event)" />
+
+    <div id="csv-preview" style="display:none;width:100%;">
+      <div class="csv-preview-box" id="csv-preview-text"></div>
+      <div id="col-picker-wrap" style="display:none;margin-top:14px;">
+        <label class="label" for="col-sel">Which column contains email addresses?</label>
+        <select id="col-sel" class="input" onchange="pickEmailCol(this.value)"></select>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:18px;">
+        <button class="btn btn-primary" id="csv-run-btn" onclick="runCSV()">Verify Emails</button>
+        <button class="btn btn-outline btn-sm" onclick="resetCSV()">Reset</button>
+      </div>
+    </div>
+
+    <div id="csv-ver-prog" style="display:none;margin-top:24px;width:100%;">
+      <div class="prog-lbl">Verifying <strong id="csv-ver-cur">0</strong> of <strong id="csv-ver-tot">0</strong>…</div>
+      <div class="prog-wrap" style="margin-top:8px;"><div class="prog-bar" id="csv-ver-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCREEN: RESULTS
+════════════════════════════════════════════════════ -->
+<div id="s-results" class="screen">
+  <div class="app-header">
+    <div class="logo">
+      <span class="logo-chev">»</span>
+      <span class="logo-name">AeroRev</span>
+    </div>
+    <div class="app-header-right">
+      <button class="btn btn-ghost btn-sm" onclick="goBack()">← New Verification</button>
+      <button class="btn btn-outline btn-sm" onclick="exportCSV()">Export CSV</button>
+      <button class="btn btn-primary btn-sm" id="push-btn" style="display:none;" onclick="pushToHubSpot()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+        Push to HubSpot
+      </button>
+    </div>
+  </div>
+
+  <div class="res-body">
+    <!-- Push progress -->
+    <div id="push-prog-wrap" style="display:none;margin-bottom:18px;">
+      <div class="push-prog-lbl" id="push-prog-lbl">Updating HubSpot…</div>
+      <div class="prog-wrap"><div class="prog-bar" id="push-prog-bar" style="width:0%"></div></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-lbl">Total Verified</div><div class="stat-val" id="st-total">0</div></div>
+      <div class="stat-card"><div class="stat-lbl">Valid / Likely Valid</div><div class="stat-val green" id="st-valid">0</div></div>
+      <div class="stat-card"><div class="stat-lbl">Invalid</div><div class="stat-val red" id="st-invalid">0</div></div>
+      <div class="stat-card"><div class="stat-lbl">Risky / Unverifiable</div><div class="stat-val amber" id="st-risky">0</div></div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <div class="filter-tabs">
+        <button class="ftab on" data-f="all"     onclick="setFilter('all')">All</button>
+        <button class="ftab"    data-f="valid"   onclick="setFilter('valid')">Valid</button>
+        <button class="ftab"    data-f="likely"  onclick="setFilter('likely')">Likely Valid</button>
+        <button class="ftab"    data-f="invalid" onclick="setFilter('invalid')">Invalid</button>
+        <button class="ftab"    data-f="risky"   onclick="setFilter('risky')">Risky</button>
+      </div>
+      <input class="search-box" id="search-box" placeholder="Search name or email…" oninput="setSearch(this.value)" />
+    </div>
+
+    <!-- Table -->
+    <div class="tbl-wrap">
+      <div style="overflow-x:auto;">
+        <table>
+          <thead id="res-thead"></thead>
+          <tbody id="res-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════
+// CONSTANTS
+// ════════════════════════════════════════════════
+
+const DISPOSABLE = new Set([
+  'mailinator.com','guerrillamail.com','tempmail.com','throwam.com','yopmail.com',
+  'sharklasers.com','trashmail.com','fakeinbox.com','spamgourmet.com','dispostable.com',
+  'maildrop.cc','getairmail.com','filzmail.com','tempr.email','discard.email',
+  'mailnesia.com','mailnull.com','spamhereplease.com','trbvm.com','guerrillamailblock.com',
+  'grr.la','guerrillamail.info','guerrillamail.biz','guerrillamail.de','guerrillamail.net',
+  'guerrillamail.org','spam4.me','trashmail.at','trashmail.io','trashmail.me',
+  'trashmail.net','trashmail.org','throwaway.email','tempinbox.com','tempemail.net',
+  'temp-mail.org','temp-mail.io','mailtemp.info','mailtemp.net','10minutemail.com',
+  '10minutemail.net','10minutemail.org','10minutemail.co.uk','tempail.com','mailsac.com',
+  'spamgourmet.net','spamgourmet.org','spambox.us','spambox.info','fakemailgenerator.com',
+  'mailbucket.org','maileater.com','mailexpire.com','mailforspam.com','mailin8r.com',
+  'mailinator2.com','mailme.ir','mailnew.com','mailscrap.com','mailshell.com',
+  'mailslite.com','mailseal.de','mailzilla.com','mailzilla.org','mohmal.com',
+  'mt2015.com','mt2016.com','nwldx.com','objectmail.com','obobbo.com',
+  'odnorazovoe.ru','oneoffmail.com','owlpic.com','pecinan.com','pecinan.net',
+  'pecinan.org','pookmail.com','rtrtr.com','safetymail.info','safetypost.de',
+  'sharedmailbox.org','skeefmail.com','slaskpost.se','snkmail.com','sofimail.com',
+  'sofort-mail.de','spam.la','spamavert.com','spamfree24.org','throwtrash.com',
+  'trashdevil.com','trashdevil.de','trickmail.net','trxmail.com','turual.com',
+  'twinmail.de','uroid.com','vomoto.com','wegwerfmail.de','wegwerfmail.net',
+  'wegwerfmail.org','wh4f.org','whopy.com','wilemail.com','yepmail.net',
+]);
+
+const CONSUMER = new Set([
+  'gmail.com','googlemail.com','outlook.com','hotmail.com','hotmail.co.uk',
+  'live.com','msn.com','yahoo.com','yahoo.co.uk','icloud.com',
+  'me.com','mac.com','aol.com','protonmail.com','proton.me',
+]);
+
+// ════════════════════════════════════════════════
+// APP STATE
+// ════════════════════════════════════════════════
+
+const S = {
+  mode: null,           // 'hubspot' | 'csv'
+  token: null,          // HubSpot token (memory only)
+  results: [],          // [{email, name?, company?, id?, row?, status}]
+  csvHeaders: [],
+  csvRows: [],
+  emailCol: -1,
+  filter: 'all',
+  search: '',
+};
+
+const mxCache = new Map();
+
+// ════════════════════════════════════════════════
+// SCREEN NAVIGATION
+// ════════════════════════════════════════════════
+
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('s-' + id);
+  if (el) el.classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  goTo(S.mode === 'hubspot' ? 'hubspot' : 'csv');
+}
+
+function disconnect() {
+  S.token = null;
+  S.results = [];
+  goTo('landing');
+}
+
+function startCSV() {
+  S.mode = 'csv';
+  resetCSV();
+  goTo('csv');
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('open');
+}
+
+function openModal() {
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+// ════════════════════════════════════════════════
+// TOASTS
+// ════════════════════════════════════════════════
+
+function toast(msg, type = 'info', ms = 4500) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 350); }, ms);
+}
+
+// ════════════════════════════════════════════════
+// HUBSPOT AUTH
+// ════════════════════════════════════════════════
+
+async function connectHubSpot() {
+  const tokEl  = document.getElementById('tok-in');
+  const errEl  = document.getElementById('tok-err');
+  const btn    = document.getElementById('tok-btn');
+  const token  = tokEl.value.trim();
+
+  if (!token) {
+    errEl.textContent = 'Please enter your Private App token';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Connecting…';
+
+  try {
+    const res = await hsGet('https://api.hubapi.com/crm/v3/objects/contacts?limit=1', token);
+    if (res.ok) {
+      S.token = token;
+      S.mode  = 'hubspot';
+      tokEl.value = '';
+      btn.disabled = false;
+      btn.textContent = 'Connect to HubSpot';
+      goTo('hubspot');
+      loadLists();
+    } else {
+      errEl.textContent = 'Invalid token — check your Private App permissions';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Connect to HubSpot';
+    }
+  } catch (e) {
+    errEl.textContent = 'Connection failed — check your internet connection';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Connect to HubSpot';
+  }
+}
+
+// ════════════════════════════════════════════════
+// HUBSPOT API HELPERS
+// ════════════════════════════════════════════════
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function hsFetch(url, token, opts = {}) {
+  const headers = {
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json',
+    ...(opts.headers || {}),
+  };
+  let delay = 1000;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await fetch(url, { ...opts, headers });
+      if (res.status === 429) {
+        await sleep(delay);
+        delay *= 2;
+        continue;
+      }
+      if (res.status === 401) {
+        openModal();
+        throw new Error('UNAUTHORIZED');
+      }
+      return res;
+    } catch (e) {
+      if (e.message === 'UNAUTHORIZED') throw e;
+      if (attempt >= 4) throw e;
+      await sleep(delay);
+      delay *= 2;
+    }
+  }
+}
+
+async function hsGet(url, token) {
+  return hsFetch(url, token || S.token, { method: 'GET' });
+}
+
+async function hsPost(url, body, token) {
+  return hsFetch(url, token || S.token, { method: 'POST', body: JSON.stringify(body) });
+}
+
+// ════════════════════════════════════════════════
+// LOAD HUBSPOT LISTS
+// ════════════════════════════════════════════════
+
+async function loadLists() {
+  const sel = document.getElementById('list-sel');
+  sel.innerHTML = '<option value="">Loading lists…</option>';
+  try {
+    const res = await hsGet('https://api.hubapi.com/contacts/v1/lists?count=250');
+    if (!res.ok) throw new Error('bad response');
+    const data = await res.json();
+    const lists = data.lists || [];
+    if (!lists.length) {
+      sel.innerHTML = '<option value="">No lists found</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— Select a list —</option>';
+    lists.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.listId;
+      opt.textContent = l.name + ' (' + ((l.metaData && l.metaData.size) || 0) + ' contacts)';
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    sel.innerHTML = '<option value="">Failed to load lists</option>';
+    toast('Could not load HubSpot lists', 'error');
+  }
+}
+
+function toggleSrc(type) {
+  const isFilter = type === 'filter';
+  document.getElementById('src-list-wrap').style.display   = isFilter ? 'none' : 'block';
+  document.getElementById('src-filter-wrap').style.display = isFilter ? 'block' : 'none';
+  document.getElementById('opt-list').classList.toggle('on', !isFilter);
+  document.getElementById('opt-filter').classList.toggle('on', isFilter);
+}
+
+// ════════════════════════════════════════════════
+// PULL CONTACTS
+// ════════════════════════════════════════════════
+
+function setPullLabel(txt) {
+  document.getElementById('hs-pull-prog').style.display = 'block';
+  document.getElementById('hs-pull-lbl').textContent = txt;
+}
+
+async function pullFromList(listId) {
+  const contacts = [];
+  let vidOffset = null;
+  let hasMore = true;
+  while (hasMore) {
+    let url = `https://api.hubapi.com/contacts/v1/lists/${listId}/contacts/all?count=100&property=email&property=firstname&property=lastname&property=company`;
+    if (vidOffset) url += '&vidOffset=' + vidOffset;
+    const res = await hsGet(url);
+    if (!res.ok) throw new Error('Failed to pull list contacts');
+    const data = await res.json();
+    (data.contacts || []).forEach(c => {
+      const email = (c.properties && c.properties.email && c.properties.email.value) || '';
+      if (email) contacts.push({
+        id:      c.vid,
+        email,
+        name:    [(c.properties.firstname || {}).value, (c.properties.lastname || {}).value].filter(Boolean).join(' ') || '—',
+        company: (c.properties.company || {}).value || '—',
+      });
+    });
+    hasMore   = data['has-more'];
+    vidOffset = data['vid-offset'];
+    setPullLabel('Pulled ' + contacts.length + ' contacts…');
+    await sleep(80);
+  }
+  return contacts;
+}
+
+async function pullAll() {
+  const contacts = [];
+  let after = null;
+  while (true) {
+    let url = 'https://api.hubapi.com/crm/v3/objects/contacts?limit=100&properties=email,firstname,lastname,company';
+    if (after) url += '&after=' + after;
+    const res = await hsGet(url);
+    if (!res.ok) throw new Error('Failed to pull contacts');
+    const data = await res.json();
+    (data.results || []).forEach(c => {
+      const email = (c.properties && c.properties.email) || '';
+      if (email) contacts.push({
+        id:      c.id,
+        email,
+        name:    [c.properties.firstname, c.properties.lastname].filter(Boolean).join(' ') || '—',
+        company: c.properties.company || '—',
+      });
+    });
+    setPullLabel('Pulled ' + contacts.length + ' contacts…');
+    if (data.paging && data.paging.next && data.paging.next.after) {
+      after = data.paging.next.after;
+      await sleep(80);
+    } else break;
+  }
+  return contacts;
+}
+
+async function pullFiltered(type) {
+  const contacts = [];
+  let after = null;
+  const now = Date.now();
+  let filterGroups;
+  if (type === 'inactive_90') {
+    const cutoff = String(now - 90 * 86400000);
+    filterGroups = [
+      { filters: [{ propertyName: 'hs_email_last_open_date', operator: 'LT', value: cutoff }] },
+      { filters: [{ propertyName: 'hs_email_last_open_date', operator: 'NOT_HAS_PROPERTY' }] },
+    ];
+  } else {
+    const cutoff = String(now - 30 * 86400000);
+    filterGroups = [
+      { filters: [{ propertyName: 'createdate', operator: 'GT', value: cutoff }] },
+    ];
+  }
+  while (true) {
+    const body = { filterGroups, properties: ['email','firstname','lastname','company'], limit: 100 };
+    if (after) body.after = after;
+    const res = await hsPost('https://api.hubapi.com/crm/v3/objects/contacts/search', body);
+    if (!res.ok) throw new Error('Search failed');
+    const data = await res.json();
+    (data.results || []).forEach(c => {
+      const email = (c.properties && c.properties.email) || '';
+      if (email) contacts.push({
+        id:      c.id,
+        email,
+        name:    [c.properties.firstname, c.properties.lastname].filter(Boolean).join(' ') || '—',
+        company: c.properties.company || '—',
+      });
+    });
+    setPullLabel('Pulled ' + contacts.length + ' contacts…');
+    if (data.paging && data.paging.next && data.paging.next.after) {
+      after = data.paging.next.after;
+      await sleep(150);
+    } else break;
+  }
+  return contacts;
+}
+
+// ════════════════════════════════════════════════
+// RUN HUBSPOT FLOW
+// ════════════════════════════════════════════════
+
+async function runHubSpot() {
+  const btn    = document.getElementById('hs-run-btn');
+  const srcType = (document.querySelector('input[name="src"]:checked') || {}).value || 'list';
+
+  btn.disabled = true;
+  btn.textContent = 'Working…';
+  document.getElementById('hs-pull-prog').style.display = 'none';
+  document.getElementById('hs-ver-prog').style.display  = 'none';
+
+  try {
+    let contacts = [];
+    if (srcType === 'list') {
+      const listId = document.getElementById('list-sel').value;
+      if (!listId) { toast('Please select a list', 'error'); return; }
+      contacts = await pullFromList(listId);
+    } else {
+      const ft = document.getElementById('filter-sel').value;
+      contacts = ft === 'all' ? await pullAll() : await pullFiltered(ft);
+    }
+
+    if (!contacts.length) { toast('No contacts with email addresses found', 'info'); return; }
+
+    document.getElementById('hs-pull-prog').style.display = 'none';
+    S.results = await verifyList(contacts, 'hubspot');
+    S.mode = 'hubspot';
+    showResults();
+
+  } catch (e) {
+    if (e.message !== 'UNAUTHORIZED') toast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Pull Contacts & Verify';
+    document.getElementById('hs-pull-prog').style.display = 'none';
+    document.getElementById('hs-ver-prog').style.display  = 'none';
+  }
+}
+
+// ════════════════════════════════════════════════
+// CSV UPLOAD
+// ════════════════════════════════════════════════
+
+function doDragOver(e) { e.preventDefault(); document.getElementById('dropzone').classList.add('drag'); }
+function doDragLeave()  { document.getElementById('dropzone').classList.remove('drag'); }
+function doDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f && f.name.toLowerCase().endsWith('.csv')) readCSV(f);
+  else toast('Please upload a .csv file', 'error');
+}
+function onFileSelect(e) { if (e.target.files[0]) readCSV(e.target.files[0]); }
+
+function readCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => parseCSV(e.target.result);
+  reader.readAsText(file);
+}
+
+function parseCSVRow(line) {
+  const res = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (c === ',' && !inQ) { res.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  res.push(cur.trim());
+  return res;
+}
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) { toast('CSV appears empty or has only headers', 'error'); return; }
+
+  const headers = parseCSVRow(lines[0]);
+  const rows    = lines.slice(1).map(l => parseCSVRow(l)).filter(r => r.some(c => c));
+
+  S.csvHeaders = headers;
+  S.csvRows    = rows;
+
+  const emailIdx = headers.findIndex(h => h.toLowerCase().includes('email'));
+
+  const prevEl   = document.getElementById('csv-preview');
+  const prevText = document.getElementById('csv-preview-text');
+  const colWrap  = document.getElementById('col-picker-wrap');
+  prevEl.style.display = 'block';
+
+  if (emailIdx >= 0) {
+    S.emailCol = emailIdx;
+    const cnt  = rows.filter(r => r[emailIdx] && r[emailIdx].trim()).length;
+    prevText.innerHTML = `Found <strong>${cnt} emails</strong> in column: <strong>${esc(headers[emailIdx])}</strong>`;
+    colWrap.style.display = 'none';
+  } else {
+    S.emailCol = -1;
+    prevText.innerHTML = `Loaded <strong>${rows.length} rows</strong>. Select the email column below.`;
+    colWrap.style.display = 'block';
+    const sel = document.getElementById('col-sel');
+    sel.innerHTML = headers.map((h, i) => `<option value="${i}">${esc(h || 'Column ' + (i+1))}</option>`).join('');
+  }
+  document.getElementById('dropzone').style.display = 'none';
+}
+
+function pickEmailCol(idx) {
+  S.emailCol = parseInt(idx);
+  const cnt  = S.csvRows.filter(r => r[S.emailCol] && r[S.emailCol].trim()).length;
+  document.getElementById('csv-preview-text').innerHTML =
+    `Found <strong>${cnt} emails</strong> in column: <strong>${esc(S.csvHeaders[S.emailCol] || 'Column ' + (S.emailCol+1))}</strong>`;
+}
+
+function resetCSV() {
+  S.csvHeaders = []; S.csvRows = []; S.emailCol = -1;
+  document.getElementById('csv-preview').style.display     = 'none';
+  document.getElementById('dropzone').style.display        = 'block';
+  document.getElementById('csv-ver-prog').style.display    = 'none';
+  document.getElementById('csv-file').value                = '';
+}
+
+async function runCSV() {
+  if (S.emailCol < 0) { toast('Please select the email column', 'error'); return; }
+  const btn = document.getElementById('csv-run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+  document.getElementById('csv-ver-prog').style.display = 'block';
+
+  try {
+    const items = S.csvRows
+      .map((row, ri) => ({ rowIndex: ri, email: (row[S.emailCol] || '').trim(), row }))
+      .filter(x => x.email);
+
+    if (!items.length) { toast('No email addresses found in selected column', 'error'); return; }
+
+    S.results = await verifyList(items, 'csv');
+    S.mode = 'csv';
+    showResults();
+  } catch (e) {
+    toast('Verification failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Verify Emails';
+    document.getElementById('csv-ver-prog').style.display = 'none';
+  }
+}
+
+// ════════════════════════════════════════════════
+// VERIFICATION ENGINE
+// ════════════════════════════════════════════════
+
+const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+
+async function verifyEmail(email) {
+  // Layer 1 — syntax
+  if (!EMAIL_RE.test(email)) return 'invalid_format';
+
+  const domain = email.split('@')[1].toLowerCase();
+
+  // Layer 2 — disposable
+  if (DISPOSABLE.has(domain)) return 'invalid_disposable';
+
+  // Layer 3 — MX record
+  let hasMX = false;
+  try {
+    if (mxCache.has(domain)) {
+      hasMX = mxCache.get(domain);
+    } else {
+      const res  = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`);
+      if (!res.ok) { mxCache.set(domain, false); return 'unknown'; }
+      const data = await res.json();
+      hasMX = !!(data.Answer && data.Answer.length);
+      mxCache.set(domain, hasMX);
+    }
+  } catch (_) {
+    return 'unknown';
+  }
+  if (!hasMX) return 'invalid_no_mx';
+
+  // Layer 4 — consumer domain
+  if (CONSUMER.has(domain)) return 'likely_valid';
+
+  // Layer 5 — business domain with MX
+  return 'likely_valid_business';
+}
+
+async function verifyList(items, mode) {
+  const total   = items.length;
+  const curEl   = document.getElementById(mode === 'hubspot' ? 'hs-ver-cur' : 'csv-ver-cur');
+  const totEl   = document.getElementById(mode === 'hubspot' ? 'hs-ver-tot' : 'csv-ver-tot');
+  const barEl   = document.getElementById(mode === 'hubspot' ? 'hs-ver-bar' : 'csv-ver-bar');
+  const wrapEl  = document.getElementById(mode === 'hubspot' ? 'hs-ver-prog' : 'csv-ver-prog');
+
+  if (wrapEl)  wrapEl.style.display  = 'block';
+  if (totEl)   totEl.textContent     = total;
+
+  const results = [];
+  for (let i = 0; i < total; i++) {
+    if (curEl) curEl.textContent = i + 1;
+    if (barEl) barEl.style.width = ((i + 1) / total * 100) + '%';
+
+    let status;
+    try { status = await verifyEmail(items[i].email); }
+    catch (_) { status = 'unknown'; }
+
+    results.push({ ...items[i], status });
+    if (i % 10 === 0) await sleep(0); // yield to browser
+  }
+  return results;
+}
+
+// ════════════════════════════════════════════════
+// RESULTS
+// ════════════════════════════════════════════════
+
+const STATUS_LABEL = {
+  valid:                 'Valid',
+  likely_valid:          'Likely Valid',
+  likely_valid_business: 'Likely Valid (Business)',
+  invalid_format:        'Invalid Format',
+  invalid_disposable:    'Disposable',
+  invalid_no_mx:         'No Mail Server',
+  unknown:               'Unknown',
+};
+
+function statusGroup(s) {
+  if (s === 'valid') return 'valid';
+  if (s === 'likely_valid' || s === 'likely_valid_business') return 'likely';
+  if (s === 'invalid_format' || s === 'invalid_disposable' || s === 'invalid_no_mx') return 'invalid';
+  return 'risky';
+}
+
+function showResults() {
+  S.filter = 'all';
+  S.search = '';
+
+  const total   = S.results.length;
+  const valid   = S.results.filter(r => statusGroup(r.status) === 'valid' || statusGroup(r.status) === 'likely').length;
+  const invalid = S.results.filter(r => statusGroup(r.status) === 'invalid').length;
+  const risky   = S.results.filter(r => statusGroup(r.status) === 'risky').length;
+
+  document.getElementById('st-total').textContent   = total.toLocaleString();
+  document.getElementById('st-valid').textContent   = valid.toLocaleString();
+  document.getElementById('st-invalid').textContent = invalid.toLocaleString();
+  document.getElementById('st-risky').textContent   = risky.toLocaleString();
+
+  // HubSpot push button
+  document.getElementById('push-btn').style.display = S.mode === 'hubspot' ? 'inline-flex' : 'none';
+
+  // Table headers
+  const thead = document.getElementById('res-thead');
+  if (S.mode === 'hubspot') {
+    thead.innerHTML = '<tr><th>Name</th><th>Email</th><th>Company</th><th>Status</th><th>HubSpot ID</th></tr>';
+  } else {
+    const cols = S.csvHeaders.map(h => `<th>${esc(h)}</th>`).join('');
+    thead.innerHTML = `<tr>${cols}<th>Status</th></tr>`;
+  }
+
+  // Reset filter tabs + search
+  document.querySelectorAll('.ftab').forEach(t => t.classList.toggle('on', t.dataset.f === 'all'));
+  document.getElementById('search-box').value = '';
+
+  renderTable();
+  goTo('results');
+}
+
+function renderTable() {
+  const q     = S.search.toLowerCase();
+  const tbody = document.getElementById('res-tbody');
+
+  const filtered = S.results.filter(r => {
+    if (S.filter !== 'all' && statusGroup(r.status) !== S.filter) return false;
+    if (q) {
+      const hay = (S.mode === 'csv')
+        ? (r.row || []).join(' ').toLowerCase()
+        : ((r.email || '') + ' ' + (r.name || '')).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">No results match your filter</div></td></tr>';
+    return;
+  }
+
+  const TIP = 'Full SMTP verification requires server-side tooling. MX record confirmed — mailbox existence unverified.';
+
+  if (S.mode === 'hubspot') {
+    tbody.innerHTML = filtered.map(r => `
+      <tr>
+        <td>${esc(r.name || '—')}</td>
+        <td class="dim">${esc(r.email)}</td>
+        <td class="dim">${esc(r.company || '—')}</td>
+        <td>
+          <span class="badge b-${r.status}">${STATUS_LABEL[r.status] || r.status}</span>
+          ${r.status === 'likely_valid_business' ? `<span class="tip" data-t="${esc(TIP)}">i</span>` : ''}
+        </td>
+        <td class="dim">${esc(String(r.id || '—'))}</td>
+      </tr>`).join('');
+  } else {
+    tbody.innerHTML = filtered.map(r => {
+      const cells = (r.row || []).map(c => `<td title="${esc(c)}">${esc(c)}</td>`).join('');
+      return `<tr>
+        ${cells}
+        <td>
+          <span class="badge b-${r.status}">${STATUS_LABEL[r.status] || r.status}</span>
+          ${r.status === 'likely_valid_business' ? `<span class="tip" data-t="${esc(TIP)}">i</span>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function setFilter(f) {
+  S.filter = f;
+  document.querySelectorAll('.ftab').forEach(t => t.classList.toggle('on', t.dataset.f === f));
+  renderTable();
+}
+
+function setSearch(q) { S.search = q; renderTable(); }
+
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════
+// EXPORT CSV
+// ════════════════════════════════════════════════
+
+function csvQ(v) {
+  const s = String(v == null ? '' : v);
+  return (s.includes(',') || s.includes('"') || s.includes('\n'))
+    ? `"${s.replace(/"/g,'""')}"` : s;
+}
+
+function exportCSV() {
+  if (!S.results.length) return;
+  let headers, rows;
+  if (S.mode === 'hubspot') {
+    headers = ['Name','Email','Company','Verification Status','HubSpot ID'];
+    rows = S.results.map(r => [r.name||'', r.email||'', r.company||'', STATUS_LABEL[r.status]||r.status, r.id||'']);
+  } else {
+    headers = [...S.csvHeaders, 'Verification Status'];
+    rows = S.results.map(r => [...(r.row||[]), STATUS_LABEL[r.status]||r.status]);
+  }
+  const csv = [headers.map(csvQ).join(','), ...rows.map(r => r.map(csvQ).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'aerorev-email-verification-' + Date.now() + '.csv';
+  a.click();
+  toast('CSV exported successfully', 'success');
+}
+
+// ════════════════════════════════════════════════
+// PUSH TO HUBSPOT
+// ════════════════════════════════════════════════
+
+async function ensureProperty() {
+  const checkRes = await hsGet('https://api.hubapi.com/crm/v3/properties/contacts/aerorev_email_verification_status');
+  if (checkRes.status === 404) {
+    const prop = {
+      name: 'aerorev_email_verification_status',
+      label: 'Email Verification Status',
+      groupName: 'contactinformation',
+      type: 'enumeration',
+      fieldType: 'select',
+      options: [
+        { label: 'Valid',                        value: 'valid',                 displayOrder: 0 },
+        { label: 'Likely Valid - Consumer Domain',value: 'likely_valid',          displayOrder: 1 },
+        { label: 'Likely Valid - Business Domain',value: 'likely_valid_business', displayOrder: 2 },
+        { label: 'Invalid - Bad Format',          value: 'invalid_format',        displayOrder: 3 },
+        { label: 'Invalid - Disposable',          value: 'invalid_disposable',    displayOrder: 4 },
+        { label: 'Invalid - No Mail Server',      value: 'invalid_no_mx',         displayOrder: 5 },
+        { label: 'Unknown',                       value: 'unknown',               displayOrder: 6 },
+      ],
+    };
+    const createRes = await hsPost('https://api.hubapi.com/crm/v3/properties/contacts', prop);
+    if (!createRes.ok) {
+      const err = await createRes.json().catch(() => ({}));
+      throw new Error('Could not create HubSpot property: ' + (err.message || 'unknown'));
+    }
+  } else if (!checkRes.ok) {
+    throw new Error('Could not check HubSpot property');
+  }
+}
+
+async function pushToHubSpot() {
+  const btn      = document.getElementById('push-btn');
+  const progWrap = document.getElementById('push-prog-wrap');
+  const progBar  = document.getElementById('push-prog-bar');
+  const progLbl  = document.getElementById('push-prog-lbl');
+
+  btn.disabled = true;
+  btn.textContent = 'Pushing…';
+  progWrap.style.display = 'block';
+  progBar.style.width = '0%';
+  progBar.style.background = 'var(--accent)';
+
+  try {
+    progLbl.textContent = 'Checking HubSpot property…';
+    progBar.style.width = '4%';
+    await ensureProperty();
+
+    const results = S.results;
+    const total   = results.length;
+    const batch   = 100;
+    let updated   = 0;
+
+    for (let i = 0; i < total; i += batch) {
+      const slice = results.slice(i, i + batch);
+      const payload = { inputs: slice.map(r => ({ id: String(r.id), properties: { aerorev_email_verification_status: r.status } })) };
+      const res = await hsPost('https://api.hubapi.com/crm/v3/objects/contacts/batch/update', payload);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Batch update failed');
+      }
+      updated += slice.length;
+      progBar.style.width = Math.round((updated / total) * 100) + '%';
+      progLbl.textContent = `Updating HubSpot… ${updated} of ${total}`;
+      await sleep(250);
+    }
+
+    toast(`✅ ${total} contacts updated in HubSpot`, 'success', 6000);
+    progLbl.textContent = `✅ ${total} contacts updated successfully`;
+    setTimeout(() => { progWrap.style.display = 'none'; progBar.style.width = '0%'; }, 5000);
+
+  } catch (e) {
+    if (e.message !== 'UNAUTHORIZED') toast('Push failed: ' + e.message, 'error');
+    progWrap.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Push to HubSpot';
+  }
+}
+
+// ════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ════════════════════════════════════════════════
+
+document.getElementById('tok-in').addEventListener('keydown', e => {
+  if (e.key === 'Enter') connectHubSpot();
+});
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+
+goTo('landing');
+</script>
+</body>
+</html>
