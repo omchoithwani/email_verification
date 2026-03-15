@@ -669,24 +669,41 @@ async function connectHubSpot() {
   btn.disabled = true;
   btn.textContent = 'Connecting…';
 
+  // Use a plain fetch here — no retry loop, so failure is immediate and diagnostic.
+  let res;
   try {
-    const res = await hsGet('https://api.hubapi.com/crm/v3/objects/contacts?limit=1', token);
-    if (res.ok) {
-      S.token = token;
-      S.mode  = 'hubspot';
-      tokEl.value = '';
-      btn.disabled = false;
-      btn.textContent = 'Connect to HubSpot';
-      goTo('hubspot');
-      loadLists();
-    } else {
-      errEl.textContent = 'Invalid token — check your Private App permissions';
-      errEl.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = 'Connect to HubSpot';
-    }
+    res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts?limit=1', {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    });
   } catch (e) {
-    errEl.textContent = 'Connection failed — check your internet connection';
+    // fetch() itself threw — either a real network outage or a CORS block.
+    // CORS errors surface as a generic TypeError: "Failed to fetch" with no status code.
+    const isCORS = /failed to fetch|network|cors/i.test(e.message || '');
+    errEl.innerHTML = isCORS
+      ? 'CORS error — HubSpot blocked the request from this origin.<br><small style="color:var(--text-2)">Serve the file over HTTP instead of opening it as file://. Run: <code>npx serve .</code> then open <code>http://localhost:3000</code></small>'
+      : 'Network error: ' + (e.message || 'unknown') + ' — check your connection';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Connect to HubSpot';
+    return;
+  }
+
+  if (res.ok) {
+    S.token = token;
+    S.mode  = 'hubspot';
+    tokEl.value = '';
+    btn.disabled = false;
+    btn.textContent = 'Connect to HubSpot';
+    goTo('hubspot');
+    loadLists();
+  } else if (res.status === 401 || res.status === 403) {
+    errEl.textContent = 'Invalid token — check your Private App permissions';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Connect to HubSpot';
+  } else {
+    errEl.textContent = `Unexpected response (HTTP ${res.status}) — check your token and try again`;
     errEl.style.display = 'block';
     btn.disabled = false;
     btn.textContent = 'Connect to HubSpot';
