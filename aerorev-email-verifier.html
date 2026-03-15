@@ -1056,6 +1056,20 @@ async function verifyEmail(email) {
   } catch (_) {
     return 'unknown';
   }
+  // RFC 5321 §5.1: if no MX, MTAs fall back to the A record.
+  // Only mark invalid if neither MX nor A record exists.
+  if (!hasMX) {
+    try {
+      const aRes  = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`);
+      if (aRes.ok) {
+        const aData = await aRes.json();
+        if (aData.Answer && aData.Answer.length) {
+          // Domain has an A record — mail can be delivered there per RFC 5321
+          hasMX = true; // treat as deliverable and continue to layer 4/5
+        }
+      }
+    } catch (_) { /* if A check fails, fall through to invalid_no_mx */ }
+  }
   if (!hasMX) return 'invalid_no_mx';
 
   // Layer 4 — consumer domain
