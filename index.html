@@ -1050,6 +1050,28 @@ async function runCSV() {
 const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 
 async function verifyEmail(email) {
+  // Check persistent server-side cache first
+  try {
+    const r = await fetch(`/api/cache/${encodeURIComponent(email.toLowerCase())}`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.cached) return d.status;
+    }
+  } catch (_) { /* cache unavailable — proceed with live verification */ }
+
+  const status = await _doVerifyEmail(email);
+
+  // Store result in persistent cache (fire-and-forget)
+  fetch('/api/cache', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.toLowerCase(), status }),
+  }).catch(() => {});
+
+  return status;
+}
+
+async function _doVerifyEmail(email) {
   // Layer 1 — syntax
   if (!EMAIL_RE.test(email)) return 'invalid_format';
 

@@ -1,11 +1,45 @@
-const express = require('express');
-const https   = require('https');
-const path    = require('path');
+const express  = require('express');
+const https    = require('https');
+const path     = require('path');
+const Database = require('better-sqlite3');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// ── Email cache DB ──────────────────────────────────────────
+// Stores previously verified email results so they don't need
+// to be re-checked on subsequent runs.
+const db = new Database(path.join(__dirname, 'email_cache.db'));
+db.exec(`
+  CREATE TABLE IF NOT EXISTS email_cache (
+    email      TEXT PRIMARY KEY,
+    status     TEXT NOT NULL,
+    checked_at INTEGER NOT NULL
+  )
+`);
+
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// GET /api/cache/:email — check if an email has a cached result
+app.get('/api/cache/:email', (req, res) => {
+  const row = db.prepare('SELECT status, checked_at FROM email_cache WHERE email = ?')
+                .get(req.params.email.toLowerCase());
+  if (!row || Date.now() - row.checked_at > CACHE_TTL_MS) {
+    return res.json({ cached: false });
+  }
+  res.json({ cached: true, status: row.status });
+});
+
+// POST /api/cache — store a verified email result
+app.post('/api/cache', (req, res) => {
+  const { email, status } = req.body;
+  if (!email || !status) return res.status(400).json({ error: 'email and status required' });
+  db.prepare('INSERT OR REPLACE INTO email_cache (email, status, checked_at) VALUES (?, ?, ?)')
+    .run(email.toLowerCase(), status, Date.now());
+  res.json({ ok: true });
+});
 
 // ── HubSpot proxy ──────────────────────────────────────────
 // Forwards /api/hubspot/* → https://api.hubapi.com/*
