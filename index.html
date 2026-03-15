@@ -672,7 +672,7 @@ async function connectHubSpot() {
   // Use a plain fetch here — no retry loop, so failure is immediate and diagnostic.
   let res;
   try {
-    res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts?limit=1', {
+    res = await fetch('/api/hubspot/crm/v3/objects/contacts?limit=1', {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     });
@@ -761,7 +761,7 @@ async function loadLists() {
   const sel = document.getElementById('list-sel');
   sel.innerHTML = '<option value="">Loading lists…</option>';
   try {
-    const res = await hsGet('https://api.hubapi.com/contacts/v1/lists?count=250');
+    const res = await hsGet('/api/hubspot/contacts/v1/lists?count=250');
     if (!res.ok) throw new Error('bad response');
     const data = await res.json();
     const lists = data.lists || [];
@@ -804,7 +804,7 @@ async function pullFromList(listId) {
   let vidOffset = null;
   let hasMore = true;
   while (hasMore) {
-    let url = `https://api.hubapi.com/contacts/v1/lists/${listId}/contacts/all?count=100&property=email&property=firstname&property=lastname&property=company`;
+    let url = `/api/hubspot/contacts/v1/lists/${listId}/contacts/all?count=100&property=email&property=firstname&property=lastname&property=company`;
     if (vidOffset) url += '&vidOffset=' + vidOffset;
     const res = await hsGet(url);
     if (!res.ok) throw new Error('Failed to pull list contacts');
@@ -830,7 +830,7 @@ async function pullAll() {
   const contacts = [];
   let after = null;
   while (true) {
-    let url = 'https://api.hubapi.com/crm/v3/objects/contacts?limit=100&properties=email,firstname,lastname,company';
+    let url = '/api/hubspot/crm/v3/objects/contacts?limit=100&properties=email,firstname,lastname,company';
     if (after) url += '&after=' + after;
     const res = await hsGet(url);
     if (!res.ok) throw new Error('Failed to pull contacts');
@@ -873,7 +873,7 @@ async function pullFiltered(type) {
   while (true) {
     const body = { filterGroups, properties: ['email','firstname','lastname','company'], limit: 100 };
     if (after) body.after = after;
-    const res = await hsPost('https://api.hubapi.com/crm/v3/objects/contacts/search', body);
+    const res = await hsPost('/api/hubspot/crm/v3/objects/contacts/search', body);
     if (!res.ok) throw new Error('Search failed');
     const data = await res.json();
     (data.results || []).forEach(c => {
@@ -1271,7 +1271,7 @@ function exportCSV() {
 // ════════════════════════════════════════════════
 
 async function ensureProperty() {
-  const checkRes = await hsGet('https://api.hubapi.com/crm/v3/properties/contacts/aerorev_email_verification_status');
+  const checkRes = await hsGet('/api/hubspot/crm/v3/properties/contacts/aerorev_email_verification_status');
   if (checkRes.status === 404) {
     const prop = {
       name: 'aerorev_email_verification_status',
@@ -1289,7 +1289,7 @@ async function ensureProperty() {
         { label: 'Unknown',                       value: 'unknown',               displayOrder: 6 },
       ],
     };
-    const createRes = await hsPost('https://api.hubapi.com/crm/v3/properties/contacts', prop);
+    const createRes = await hsPost('/api/hubspot/crm/v3/properties/contacts', prop);
     if (!createRes.ok) {
       const err = await createRes.json().catch(() => ({}));
       throw new Error('Could not create HubSpot property: ' + (err.message || 'unknown'));
@@ -1324,7 +1324,7 @@ async function pushToHubSpot() {
     for (let i = 0; i < total; i += batch) {
       const slice = results.slice(i, i + batch);
       const payload = { inputs: slice.map(r => ({ id: String(r.id), properties: { aerorev_email_verification_status: r.status } })) };
-      const res = await hsPost('https://api.hubapi.com/crm/v3/objects/contacts/batch/update', payload);
+      const res = await hsPost('/api/hubspot/crm/v3/objects/contacts/batch/update', payload);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Batch update failed');
