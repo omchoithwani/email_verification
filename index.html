@@ -103,6 +103,8 @@
     .b-likely_valid_business::before{ background: #93C5FD; }
     .b-invalid_format,   .b-invalid_disposable,   .b-invalid_no_mx        { background: #EF444422; color: #EF4444; }
     .b-invalid_format::before, .b-invalid_disposable::before, .b-invalid_no_mx::before { background: #EF4444; }
+    .b-role_address        { background: #F97B1622; color: #F97B16; }
+    .b-role_address::before{ background: #F97B16; }
     .b-unknown        { background: #F59E0B22; color: #F59E0B; }
     .b-unknown::before{ background: #F59E0B; }
 
@@ -578,6 +580,26 @@ const DISPOSABLE = new Set([
   'trashdevil.com','trashdevil.de','trickmail.net','trxmail.com','turual.com',
   'twinmail.de','uroid.com','vomoto.com','wegwerfmail.de','wegwerfmail.net',
   'wegwerfmail.org','wh4f.org','whopy.com','wilemail.com','yepmail.net',
+]);
+
+const ROLE_ADDRESSES = new Set([
+  'admin','administrator','admins',
+  'info','information','enquiries','enquiry','contact','hello','hi','hey',
+  'support','helpdesk','help','customerservice','customer-service','customer_service','service',
+  'sales','marketing','advertising','promotions','newsletter','news','updates','offers',
+  'noreply','no-reply','donotreply','do-not-reply','do_not_reply','no_reply',
+  'webmaster','postmaster','hostmaster','mailer-daemon','mailer_daemon',
+  'abuse','spam','phishing','security','privacy',
+  'billing','payments','finance','accounts','accounting','invoices','invoice',
+  'legal','compliance','contracts','gdpr',
+  'press','media','pr','communications','publicrelations',
+  'hr','humanresources','human-resources','careers','jobs','recruitment','hiring','talent',
+  'team','staff','office','reception','general','management',
+  'tech','technical','it','devops','ops','operations',
+  'feedback','survey','reviews',
+  'partners','partnership','affiliate','affiliates',
+  'events','conference',
+  'unsubscribe','optout','opt-out',
 ]);
 
 const CONSUMER = new Set([
@@ -1075,9 +1097,13 @@ async function _doVerifyEmail(email) {
   // Layer 1 — syntax
   if (!EMAIL_RE.test(email)) return 'invalid_format';
 
+  const local  = email.split('@')[0].toLowerCase().replace(/[._\-+]/g, '');
   const domain = email.split('@')[1].toLowerCase();
 
-  // Layer 2 — disposable
+  // Layer 2 — role address (shared inbox, not a personal mailbox)
+  if (ROLE_ADDRESSES.has(local)) return 'role_address';
+
+  // Layer 3 — disposable
   if (DISPOSABLE.has(domain)) return 'invalid_disposable';
 
   // Layer 3 — MX record
@@ -1151,6 +1177,7 @@ const STATUS_LABEL = {
   valid:                 'Valid',
   likely_valid:          'Likely Valid',
   likely_valid_business: 'Likely Valid (Business)',
+  role_address:          'Role Address',
   invalid_format:        'Invalid Format',
   invalid_disposable:    'Disposable',
   invalid_no_mx:         'No Mail Server',
@@ -1161,6 +1188,7 @@ function statusGroup(s) {
   if (s === 'valid') return 'valid';
   if (s === 'likely_valid' || s === 'likely_valid_business') return 'likely';
   if (s === 'invalid_format' || s === 'invalid_disposable' || s === 'invalid_no_mx') return 'invalid';
+  if (s === 'role_address') return 'risky';
   return 'risky';
 }
 
@@ -1308,7 +1336,8 @@ async function ensureProperty() {
         { label: 'Invalid - Bad Format',          value: 'invalid_format',        displayOrder: 3 },
         { label: 'Invalid - Disposable',          value: 'invalid_disposable',    displayOrder: 4 },
         { label: 'Invalid - No Mail Server',      value: 'invalid_no_mx',         displayOrder: 5 },
-        { label: 'Unknown',                       value: 'unknown',               displayOrder: 6 },
+        { label: 'Role Address',                  value: 'role_address',           displayOrder: 6 },
+        { label: 'Unknown',                       value: 'unknown',               displayOrder: 7 },
       ],
     };
     const createRes = await hsPost('/api/hubspot/crm/v3/properties/contacts', prop);
