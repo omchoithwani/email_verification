@@ -8,38 +8,54 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// ── Email cache (JSON file) ─────────────────────────────────
-// Pure-JS persistence — no native compilation required.
-const CACHE_FILE   = path.join(__dirname, 'email_cache.json');
-const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-function loadCache() {
-  try { return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); }
+// ── Helpers ────────────────────────────────────────────────
+function loadJSON(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (_) { return {}; }
 }
-
-function saveCache(cache) {
-  try { fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); }
-  catch (_) {}
+function saveJSON(file, data) {
+  try { fs.writeFileSync(file, JSON.stringify(data)); } catch (_) {}
 }
 
-const emailCache = loadCache();
+// ── Email result cache ──────────────────────────────────────
+const EMAIL_CACHE_FILE = path.join(__dirname, 'email_cache.json');
+const EMAIL_TTL_MS     = 30 * 24 * 60 * 60 * 1000; // 30 days
+const emailCache       = loadJSON(EMAIL_CACHE_FILE);
 
-// GET /api/cache/:email — return cached result if still fresh
 app.get('/api/cache/:email', (req, res) => {
   const entry = emailCache[req.params.email.toLowerCase()];
-  if (!entry || Date.now() - entry.checked_at > CACHE_TTL_MS) {
+  if (!entry || Date.now() - entry.checked_at > EMAIL_TTL_MS)
     return res.json({ cached: false });
-  }
   res.json({ cached: true, status: entry.status });
 });
 
-// POST /api/cache — store a verified email result
 app.post('/api/cache', (req, res) => {
   const { email, status } = req.body;
   if (!email || !status) return res.status(400).json({ error: 'email and status required' });
   emailCache[email.toLowerCase()] = { status, checked_at: Date.now() };
-  saveCache(emailCache);
+  saveJSON(EMAIL_CACHE_FILE, emailCache);
+  res.json({ ok: true });
+});
+
+// ── Domain MX cache ─────────────────────────────────────────
+// Persists MX lookup results so the same domain isn't re-queried
+// across separate browser sessions.
+const DOMAIN_CACHE_FILE = path.join(__dirname, 'domain_cache.json');
+const DOMAIN_TTL_MS     = 7 * 24 * 60 * 60 * 1000; // 7 days
+const domainCache       = loadJSON(DOMAIN_CACHE_FILE);
+
+app.get('/api/mx/:domain', (req, res) => {
+  const entry = domainCache[req.params.domain.toLowerCase()];
+  if (!entry || Date.now() - entry.checked_at > DOMAIN_TTL_MS)
+    return res.json({ cached: false });
+  res.json({ cached: true, hasMX: entry.hasMX });
+});
+
+app.post('/api/mx', (req, res) => {
+  const { domain, hasMX } = req.body;
+  if (!domain || hasMX === undefined) return res.status(400).json({ error: 'domain and hasMX required' });
+  domainCache[domain.toLowerCase()] = { hasMX, checked_at: Date.now() };
+  saveJSON(DOMAIN_CACHE_FILE, domainCache);
   res.json({ ok: true });
 });
 

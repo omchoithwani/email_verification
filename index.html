@@ -105,6 +105,8 @@
     .b-invalid_format::before, .b-invalid_disposable::before, .b-invalid_no_mx::before { background: #EF4444; }
     .b-role_address        { background: #F97B1622; color: #F97B16; }
     .b-role_address::before{ background: #F97B16; }
+    .b-invalid_typo        { background: #A78BFA22; color: #A78BFA; }
+    .b-invalid_typo::before{ background: #A78BFA; }
     .b-unknown        { background: #F59E0B22; color: #F59E0B; }
     .b-unknown::before{ background: #F59E0B; }
 
@@ -600,6 +602,41 @@ const ROLE_ADDRESSES = new Set([
   'partners','partnership','affiliate','affiliates',
   'events','conference',
   'unsubscribe','optout','opt-out',
+]);
+
+const DOMAIN_TYPOS = new Map([
+  // Gmail
+  ['gmial.com','gmail.com'],   ['gmai.com','gmail.com'],    ['gmail.co','gmail.com'],
+  ['gmaill.com','gmail.com'],  ['gamil.com','gmail.com'],   ['gmail.cm','gmail.com'],
+  ['gnail.com','gmail.com'],   ['gmali.com','gmail.com'],   ['gmal.com','gmail.com'],
+  ['gemail.com','gmail.com'],  ['gmail.con','gmail.com'],   ['gmail.cpm','gmail.com'],
+  ['gmail.ocm','gmail.com'],   ['gmaik.com','gmail.com'],   ['gmail.vom','gmail.com'],
+  // Yahoo
+  ['yaho.com','yahoo.com'],    ['yahooo.com','yahoo.com'],  ['yahoo.co','yahoo.com'],
+  ['yaoo.com','yahoo.com'],    ['yhoo.com','yahoo.com'],    ['yhaoo.com','yahoo.com'],
+  ['yahoo.con','yahoo.com'],   ['yaho.co.uk','yahoo.co.uk'],
+  // Outlook
+  ['outloook.com','outlook.com'], ['outlok.com','outlook.com'],
+  ['outllook.com','outlook.com'], ['outlook.co','outlook.com'],
+  ['oultook.com','outlook.com'],  ['outlook.con','outlook.com'],
+  ['outlookcom','outlook.com'],
+  // Hotmail
+  ['hotmial.com','hotmail.com'], ['hotmail.co','hotmail.com'],
+  ['htomail.com','hotmail.com'], ['hotmall.com','hotmail.com'],
+  ['hotmai.com','hotmail.com'],  ['homail.com','hotmail.com'],
+  ['hotmail.con','hotmail.com'], ['hotmil.com','hotmail.com'],
+  // iCloud
+  ['iclould.com','icloud.com'], ['iclod.com','icloud.com'],
+  ['icoud.com','icloud.com'],   ['icloud.co','icloud.com'],
+  ['iclud.com','icloud.com'],
+  // Live / MSN
+  ['live.co','live.com'],     ['liv.com','live.com'],
+  ['livecom','live.com'],     ['msn.co','msn.com'],
+  // ProtonMail
+  ['protonmai.com','protonmail.com'], ['protonmal.com','protonmail.com'],
+  ['prtonmail.com','protonmail.com'], ['protonmail.co','protonmail.com'],
+  // AOL
+  ['aoll.com','aol.com'], ['alo.com','aol.com'], ['aol.co','aol.com'],
 ]);
 
 const CONSUMER = new Set([
@@ -1103,69 +1140,95 @@ async function _doVerifyEmail(email) {
   // Layer 2 — role address (shared inbox, not a personal mailbox)
   if (ROLE_ADDRESSES.has(local)) return 'role_address';
 
-  // Layer 3 — disposable
+  // Layer 3 — domain typo
+  if (DOMAIN_TYPOS.has(domain)) return 'invalid_typo';
+
+  // Layer 4 — disposable
   if (DISPOSABLE.has(domain)) return 'invalid_disposable';
 
-  // Layer 3 — MX record
+  // Layer 5 — MX record (session cache → server cache → live DNS)
   let hasMX = false;
   try {
     if (mxCache.has(domain)) {
       hasMX = mxCache.get(domain);
     } else {
-      const res  = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`);
-      if (!res.ok) { mxCache.set(domain, false); return 'unknown'; }
-      const data = await res.json();
-      hasMX = !!(data.Answer && data.Answer.length);
+      // Check server-side domain cache before hitting DNS
+      let serverHit = false;
+      try {
+        const sc = await fetch(`/api/mx/${encodeURIComponent(domain)}`);
+        if (sc.ok) { const d = await sc.json(); if (d.cached) { hasMX = d.hasMX; serverHit = true; } }
+      } catch (_) {}
+
+      if (!serverHit) {
+        const res  = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`);
+        if (!res.ok) { mxCache.set(domain, false); return 'unknown'; }
+        const data = await res.json();
+        hasMX = !!(data.Answer && data.Answer.length);
+
+        // RFC 5321 §5.1: if no MX, MTAs fall back to the A record
+        if (!hasMX) {
+          try {
+            const aRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`);
+            if (aRes.ok) {
+              const aData = await aRes.json();
+              if (aData.Answer && aData.Answer.length) hasMX = true;
+            }
+          } catch (_) {}
+        }
+
+        // Persist to server-side domain cache (fire-and-forget)
+        fetch('/api/mx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain, hasMX }),
+        }).catch(() => {});
+      }
+
       mxCache.set(domain, hasMX);
     }
   } catch (_) {
     return 'unknown';
   }
-  // RFC 5321 §5.1: if no MX, MTAs fall back to the A record.
-  // Only mark invalid if neither MX nor A record exists.
-  if (!hasMX) {
-    try {
-      const aRes  = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=A`);
-      if (aRes.ok) {
-        const aData = await aRes.json();
-        if (aData.Answer && aData.Answer.length) {
-          // Domain has an A record — mail can be delivered there per RFC 5321
-          hasMX = true; // treat as deliverable and continue to layer 4/5
-        }
-      }
-    } catch (_) { /* if A check fails, fall through to invalid_no_mx */ }
-  }
+
   if (!hasMX) return 'invalid_no_mx';
 
-  // Layer 4 — consumer domain
+  // Layer 6 — consumer domain
   if (CONSUMER.has(domain)) return 'likely_valid';
 
-  // Layer 5 — business domain with MX
+  // Layer 7 — business domain with MX
   return 'likely_valid_business';
 }
 
 async function verifyList(items, mode) {
+  const CONCURRENCY = 8;
   const total   = items.length;
   const curEl   = document.getElementById(mode === 'hubspot' ? 'hs-ver-cur' : 'csv-ver-cur');
   const totEl   = document.getElementById(mode === 'hubspot' ? 'hs-ver-tot' : 'csv-ver-tot');
   const barEl   = document.getElementById(mode === 'hubspot' ? 'hs-ver-bar' : 'csv-ver-bar');
   const wrapEl  = document.getElementById(mode === 'hubspot' ? 'hs-ver-prog' : 'csv-ver-prog');
 
-  if (wrapEl)  wrapEl.style.display  = 'block';
-  if (totEl)   totEl.textContent     = total;
+  if (wrapEl) wrapEl.style.display = 'block';
+  if (totEl)  totEl.textContent    = total;
 
-  const results = [];
-  for (let i = 0; i < total; i++) {
-    if (curEl) curEl.textContent = i + 1;
-    if (barEl) barEl.style.width = ((i + 1) / total * 100) + '%';
+  const results   = new Array(total);
+  let completed   = 0;
+  let nextIdx     = 0;
 
-    let status;
-    try { status = await verifyEmail(items[i].email); }
-    catch (_) { status = 'unknown'; }
-
-    results.push({ ...items[i], status });
-    if (i % 10 === 0) await sleep(0); // yield to browser
+  async function worker() {
+    while (nextIdx < total) {
+      const i = nextIdx++;
+      let status;
+      try { status = await verifyEmail(items[i].email); }
+      catch (_) { status = 'unknown'; }
+      results[i] = { ...items[i], status };
+      completed++;
+      if (curEl) curEl.textContent = completed;
+      if (barEl) barEl.style.width = (completed / total * 100) + '%';
+    }
   }
+
+  // Run up to CONCURRENCY workers in parallel
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker));
   return results;
 }
 
@@ -1178,6 +1241,7 @@ const STATUS_LABEL = {
   likely_valid:          'Likely Valid',
   likely_valid_business: 'Likely Valid (Business)',
   role_address:          'Role Address',
+  invalid_typo:          'Possible Typo',
   invalid_format:        'Invalid Format',
   invalid_disposable:    'Disposable',
   invalid_no_mx:         'No Mail Server',
@@ -1187,7 +1251,7 @@ const STATUS_LABEL = {
 function statusGroup(s) {
   if (s === 'valid') return 'valid';
   if (s === 'likely_valid' || s === 'likely_valid_business') return 'likely';
-  if (s === 'invalid_format' || s === 'invalid_disposable' || s === 'invalid_no_mx') return 'invalid';
+  if (s === 'invalid_format' || s === 'invalid_disposable' || s === 'invalid_no_mx' || s === 'invalid_typo') return 'invalid';
   if (s === 'role_address') return 'risky';
   return 'risky';
 }
@@ -1248,16 +1312,26 @@ function renderTable() {
 
   const TIP = 'Full SMTP verification requires server-side tooling. MX record confirmed — mailbox existence unverified.';
 
+  function badgeFor(r) {
+    let html = `<span class="badge b-${r.status}">${STATUS_LABEL[r.status] || r.status}</span>`;
+    if (r.status === 'invalid_typo') {
+      const dom  = (r.email || '').split('@')[1] || '';
+      const sugg = DOMAIN_TYPOS.get(dom.toLowerCase());
+      if (sugg) html += ` <span class="tip" data-t="Did you mean @${esc(sugg)}?">?</span>`;
+    }
+    if (r.status === 'likely_valid_business') {
+      html += ` <span class="tip" data-t="${esc(TIP)}">i</span>`;
+    }
+    return html;
+  }
+
   if (S.mode === 'hubspot') {
     tbody.innerHTML = filtered.map(r => `
       <tr>
         <td>${esc(r.name || '—')}</td>
         <td class="dim">${esc(r.email)}</td>
         <td class="dim">${esc(r.company || '—')}</td>
-        <td>
-          <span class="badge b-${r.status}">${STATUS_LABEL[r.status] || r.status}</span>
-          ${r.status === 'likely_valid_business' ? `<span class="tip" data-t="${esc(TIP)}">i</span>` : ''}
-        </td>
+        <td>${badgeFor(r)}</td>
         <td class="dim">${esc(String(r.id || '—'))}</td>
       </tr>`).join('');
   } else {
@@ -1265,10 +1339,7 @@ function renderTable() {
       const cells = (r.row || []).map(c => `<td title="${esc(c)}">${esc(c)}</td>`).join('');
       return `<tr>
         ${cells}
-        <td>
-          <span class="badge b-${r.status}">${STATUS_LABEL[r.status] || r.status}</span>
-          ${r.status === 'likely_valid_business' ? `<span class="tip" data-t="${esc(TIP)}">i</span>` : ''}
-        </td>
+        <td>${badgeFor(r)}</td>
       </tr>`;
     }).join('');
   }
@@ -1337,7 +1408,8 @@ async function ensureProperty() {
         { label: 'Invalid - Disposable',          value: 'invalid_disposable',    displayOrder: 4 },
         { label: 'Invalid - No Mail Server',      value: 'invalid_no_mx',         displayOrder: 5 },
         { label: 'Role Address',                  value: 'role_address',           displayOrder: 6 },
-        { label: 'Unknown',                       value: 'unknown',               displayOrder: 7 },
+        { label: 'Possible Typo',                 value: 'invalid_typo',           displayOrder: 7 },
+        { label: 'Unknown',                       value: 'unknown',               displayOrder: 8 },
       ],
     };
     const createRes = await hsPost('/api/hubspot/crm/v3/properties/contacts', prop);

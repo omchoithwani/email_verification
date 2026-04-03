@@ -1,2 +1,3 @@
 node_modules/
 email_cache.json
+domain_cache.json
